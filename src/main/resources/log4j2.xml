@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- 
+在程序中获取logger的方式：
+private static Logger logger = LogManager.getLogger(Xxx.class)
+private static Logger logger = LogManager.getLogger(LogManager.ROOT_LOGGER_NAME);
+
+status: 设置为debug，这样用户可以在Eclipse的console看到Log4j2启动和加载配置文件时的打印信息
+monitorInterval: 设置为30表示每30秒配置文件会动态加载一次。在程序运行过程中，如果修改配置文件，程序会随之改变。
+
+自定义格式：
+%t：线程名称
+%p：日志级别
+%c：日志消息所在类名
+%m：消息内容
+%M：输出执行方法
+%d：发生时间，%d{yyyy-MM-dd HH:mm:ss,SSS}，输出类似：2011-10-18 22:10:28,921
+%x: 输出和当前线程相关联的NDC(嵌套诊断环境),尤其用到像java servlets这样的多客户多线程的应用中。
+%L：代码中的行数
+%n：换行
+-->
+<configuration status="off" monitorInterval="30">
+	<!-- 公共参数 -->
+	<properties>
+		<property name="project.name" value="zdemo-es"/>
+		<property name="log.path" value="/Users/zhangqingli/Documents/mytmp/logs"/>
+	</properties>
+
+	<!-- 设置appenders -->
+	<appenders>
+		<!--Appender1: 输出到Console，指定输出格式和过滤器等级为INFO（匹配就接受,否则直接拒绝）-->  
+		<Console name="Console" target="SYSTEM_OUT">
+			<PatternLayout pattern="[%-5level][%d{yyyy-MM-dd HH:mm:ss}][%F:%L] - %m%n" />
+			<ThresholdFilter level="debug" onMatch="ACCEPT" onMismatch="DENY"/>
+		</Console>
+		
+		<!-- Appender2: 输出日志到文件中，这里append指定为每次运行程序会自动清空日志文件用于测试 -->
+		<File name="FileLog" fileName="${log.path}/filelog.log" append="false">
+            <PatternLayout pattern="[%-5level][%d{yyyy-MM-dd HH:mm:ss}][%F:%L] - %m%n"/>
+            <ThresholdFilter level="INFO" onMatch="ACCEPT" onMismatch="DENY"/>
+        </File>
+        
+		<!--Appender3: 输出到滚动保存的文件，触发保存日志文件的条件是日志文件大于100MB，只保存最新的10个日志--> 
+		<RollingFile name="RollingFile1" fileName="${log.path}/rollinglog1.log" filePattern="${log.path}/rollinglog1-%i.log">  
+        	<PatternLayout pattern="[%-5level][%d{yyyy-MM-dd HH:mm:ss}][%F:%L] - %m%n" />  
+        	<ThresholdFilter level="INFO" onMatch="ACCEPT" onMismatch="DENY"/>  
+        	<SizeBasedTriggeringPolicy size="100MB" />  
+        	<DefaultRolloverStrategy max="10"/>
+    	</RollingFile>
+    	
+    	<!--Appender4: 输出到滚动保存的文件, 触发保存日志文件的条件是每分钟第一次的日志事件。ERROR日志是按分钟产生日志 -->
+    	<RollingFile name="RollingFile2" fileName="${log.path}/rollinglog2.log" filePattern="${log.path}/rollinglog2-%d{yyyy-MM-dd_HH-mm}.log">  
+	        <PatternLayout pattern="[%-5level][%d{yyyy-MM-dd HH:mm:ss}][%C:%F:%L] - %m%n" />  
+	        <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>  
+	        <TimeBasedTriggeringPolicy />  
+	    </RollingFile>
+	</appenders>
+	
+	<!-- 设置实际需要的那些appender -->
+	<loggers>
+		<root level="info">
+			<appender-ref ref="Console"/>
+			<!--
+			<appender-ref ref="FileLog"/> 
+			<appender-ref ref="RollingFile1"/> 
+			<appender-ref ref="RollingFile2"/> 
+			-->
+		</root>
+	</loggers>
+</configuration>
+
+
+
+
