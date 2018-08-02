@@ -144,7 +144,51 @@
 		language分词器：特定语言的分词器，不支持中文
 		
 ## 安装ES
+     环境介绍
+     -----------------------------------------------
+     服务器            是否可以成为主节点    是否为数据节点
+	nimbusz          true               true
+	supervisor01z    true               true
+	supervisor02z    true               true
+	-----------------------------------------------
 	安装步骤：（略）
+	
+	配置文件重要参数：
+	//集群的名称
+	cluster.name: es6.2
+	//节点名称,其余两个节点分别为node-2 和node-3
+	node.name: node-1
+	//指定该节点是否有资格被选举成为master节点，默认是true，es是默认集群中的第一台机器为master，如果这台机挂了就会重新选举master
+	node.master: true
+	//允许该节点存储数据(默认开启)
+	node.data: true
+	//索引数据的存储路径
+	path.data: /usr/local/elk/elasticsearch/data
+	//日志文件的存储路径
+	path.logs: /usr/local/elk/elasticsearch/logs
+	//设置为true来锁住内存。因为内存交换到磁盘对服务器性能来说是致命的，当jvm开始swapping时es的效率会降低，所以要保证它不swap
+	bootstrap.memory_lock: true
+	//绑定的ip地址
+	network.host: 0.0.0.0
+	//设置对外服务的http端口，默认为9200
+	http.port: 9200
+	//设置节点间交互的tcp端口,默认是9300 
+	transport.tcp.port: 9300
+	//Elasticsearch将绑定到可用的环回地址，并将扫描端口9300到9305以尝试连接到运行在同一台服务器上的其他节点。
+	//这提供了自动集群体验，而无需进行任何配置。数组设置或逗号分隔的设置。每个值的形式应该是host:port或host
+	//（如果没有设置，port默认设置会transport.profiles.default.port 回落到transport.tcp.port）。
+	//请注意，IPv6主机必须放在括号内。默认为127.0.0.1, [::1]
+	discovery.zen.ping.unicast.hosts: ["nimbusz:9300", "supervisor01z:9300", "supervisor02z:9300"]
+	//如果没有这种设置,遭受网络故障的集群就有可能将集群分成两个独立的集群 - 分裂的大脑 - 这将导致数据丢失
+	discovery.zen.minimum_master_nodes: 1
+	
+	调整es运行所需jvm的内存：
+	$ vim ${es_home}/config/jvm.options 
+	#默认是1g官方建议对jvm进行一些修改，不然很容易出现OOM,参考官网改参数配置最好不要超过内存的50% 
+	-Xms1g
+	-Xmx1g
+	
+	
 	安装中文分词器：
 	a) git clone https://github.com/medcl/elasticsearch-analysis-ik.git
 	b) cd elasticsearch-analysis-ik & mvn clean install -Dmaven.test.skip=true
@@ -152,6 +196,7 @@
 	d) 将编译后生成的elasticsearch-analysis-ik-{version}.zip 移动到ik目录下，解压会生成elasticsearch文件夹（解压完成后zip包可删除）
 	e) 将解压生成的elasticsearch文件夹下的所有内容再拷贝到ik目录下（es默认去 plugins/ik 目录下加载分词器信息）
 	f) 验证是否安装成功，在es启动的时候，日志信息会显示 ...loaded plugin [analysis-ik]...
+	
 	
 	ES安装可能出现的问题：
 	a) can not run elasticsearch as root
@@ -168,15 +213,16 @@
 	c) low disk watermark [85%] exceeded on [xxx]
 		解决方式：清理磁盘空间
 	
-	
-	d) max file descriptors [4096] for elasticsearchprocess is too low, increase to at least [65536]
+	d) max file descriptors [4096] for elasticsearchprocess is too low, increase to at least [65536] 或
+	   memory locking requested for elasticsearch process but memory is not locked
 		解决方式：maxfile descriptors为最大文件描述符，设置其大于65536即可（*表示所有用户，如果是特定用户最好配置成特定的用户）
 		$ sudo vim /etc/security/limits.conf
 			* soft nofile 65536
 			* hard nofile 131072
 			* soft nproc 4096
 			* hard nproc 4096
-	
+			* hard memlock unlimited
+			* soft memlock unlimited
 	e) max number of threads [1024] for user [elsearch] likely too low, increase to at least [4096]
 		解决方式：
 		$ sudo vim /etc/security/limits.d/90-nproc.conf
@@ -188,8 +234,15 @@
 		$ sudo vim /etc/sysctl.conf
 			vm.max_map_count=262144
 		$ sudo sysctl -p (使修改生效)
-		
-	g) 实现远程连接ES服务：
+	
+	g) 使用Head或kibana查看,发现只有nimbusz为主节点,其他两个节点并没有连接上来,查看日志发现报以下异常
+	   failed to send join request to master [{node-1}{SVrW6URqRsi3SShc1PBJkQ}{y2eFQNQ_TRenpAPyv-EnVg}xxx, 
+	   reason [RemoteTransportException[[node-1][xxxxxxxxxxxx:9300][internal:discovery/zen/join]]; nested:
+	   IllegalArgumentException[can't add node {node-3}...
+	   原因：可能是之前启动的时候报错,并没有启动成功,但是data文件中生成了其他节点的数据。将三个节点的data目录清空，再次重新
+	   启动，成功！
+	   
+	h) 实现远程连接ES服务：
 		解决方式：修改配置文件 config/elasticsearch.yml，配置 network.host: 192.168.1.106
 		如果再次启动出现 bind exception，则说明 network.host 配置错误！
 		
