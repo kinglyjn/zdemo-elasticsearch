@@ -1225,17 +1225,194 @@
 	}
 		
 	i) 聚合查询
-	常见的聚合操作：分组、求聚合值
-	常用的聚合函数：sum、avg、min、max、cardinality(求基数即互不相同的值的个数) 等。
+	两种聚合操作：分桶聚合（分组） 和 指标聚合（求最大值、最小值等）
+	常用的聚合函数：stats、extended_stats、percentiles、percentile_ranks、sum、avg、min、max、cardinality、value_count、missing 等。
 	
-	GET lib4/user/_search （根据年龄进行分组，显示前3条聚合结果，不显示查询的文档）
+	GET lib4/user/_search （根据年龄进行分组，显示前3条聚合结果，不显示查询的文档，聚合查询的结果按每一项的key顺序输出）
 	{
 	  size: 0,
 	  "aggs": {
 	    "group_of_age": {
 	      "terms": {
 	        "field": "age",
-	        "size": 3
+	        "size": 3,
+	        "order": {
+	          "_key": "asc" // "_count": "desc"
+	        }
+	      }
+	    }
+	  }
+	}
+	GET lib10/user/_search （根据姓名聚合分组，聚合结果根据include和exclude进行过滤（支持正则表达式））
+	{
+	  "aggs": {
+	    "group_of_name": {
+	      "terms": {
+	        "field": "name",
+	        "size": 10,
+	        "include": "zhang.*",
+	        "exclude": "li.*"
+	      }
+	    }
+	  }
+	}
+	GET /lib20/car/_search （两组平行的聚合分组）
+	{
+	  "aggs": {
+	    "group_of_china": {
+	      "terms": {
+	        "field": "country",
+	        "include": "china"
+	      }
+	    },
+	    "group_of_others":{
+	      "terms": {
+	        "field": "country",
+	        "exclude": "china"
+	      }
+	    }
+	  }
+	}
+	GET /lib20/car/_search （根据产地和品牌keyword的组合进行分组）
+	{
+	  "aggs": {
+	    "group_of_country": {
+	      "terms": {
+	        "script": {
+	          "source":"doc['country'].value + '-' + doc['brand'].value"
+	        }
+	      }
+	    }
+	  }
+	}
+	GET /lib20/car/_search （在查询命中的文档中选取符合过滤条件的文档进行聚合，先过滤再聚合）
+	{
+	  "aggs": {
+	    "china_cars": {
+	      "filter": {
+	        "prefix": {
+	          "country": "china"
+	        }
+	      },
+	      "aggs": {
+	        "gruop_of_brand": {
+	          "terms": {
+	            "field": "brand"
+	          }
+	        }
+	      }
+	    }
+	  }
+	}
+	GET /lib20/car/_search（根据多个过滤条件进行分组，每一个过滤条件对应于它各自的分组。这里不在过滤条件中的文档被分到other_country_cars组 ）
+	{
+	  "aggs": {
+	    "changan_cars": {
+	      "filters": {
+	        "other_bucket_key": "other_country_cars", 
+	        "filters": {
+	          "china_cars": {
+	            "match":{
+	              "country":"china"
+	            }
+	          },
+	          "germany_cars":{
+	            "match_phrase_prefix":{
+	              "country":"germany"
+	            }
+	          },
+	          "america_cars":{
+	            "prefix": {
+	              "country": "americ"
+	            }
+	          }
+	        }
+	      }
+	    }
+	  }
+	}
+	GET /lib3/user/_search （根据年龄范围进行分组，并指定每个分组的key。除了数字类型可以进行范围聚合，日期类型也可以）
+	{
+	  "size": 0, 
+	  "aggs": {
+	    "range_of_age": {
+	      "range": {
+	        "field": "age",
+	        "ranges": [
+	          {
+	            "key": "-INF-20", 
+	            "to": 20
+	          },
+	          {
+	            "key": "20-25", 
+	            "from": 20,
+	            "to": 25
+	          },
+	          {
+	            "key": "25-30", 
+	            "from": 25,
+	            "to": 30
+	          },
+	          {
+	            "key": "30-+INF", 
+	            "from": 30
+	          }
+	        ]
+	      }
+	    }
+	  }
+	}
+	GET /lib3/user/_search（按year,quarter,month,week,day,hour,minute,second的间隔时间分组或指定的时间间隔聚合分组）
+	{
+	  "aggs": {
+	    "group_of_birhday": {
+	      "date_histogram": {
+	        "field": "birthday",
+	        "interval": "month",
+	        "format": "yyyy-MM-dd"
+	      }
+	    }
+	  }
+	}
+	
+	GET /lib4/user/_search （stats统计，结果中包含 count min max avg sum 5个值）
+	{
+	  "aggs": {
+	    "stats_of_age": {
+	      "stats": {
+	        "field": "age"
+	      }
+	    }
+	  }
+	}
+	GET /lib4/user/_search （高级统计，比stats多4个统计结果：平方和、方差、标准差、平均值加/减两个标准差的区间）
+	{
+	  "aggs": {
+	    "extended_stats_of_age": {
+	      "extended_stats": {
+	        "field": "age"
+	      }
+	    }
+	  }
+	}
+	GET /lib3/user/_search （percentiles占比百分位对应的值统计，默认返回[ 1, 5, 25, 50, 75, 95, 99 ]分位上的值）
+	{
+	  "aggs": {
+	    "percentiles_of_age": {
+	      "percentiles": {
+	        "field": "age",
+	        "percents": [1,5,25,50,75,95,99]
+	      }
+	    }
+	  }
+	}
+	GET /lib3/user/_search（统计年龄小于20、25、30的文档的占比，和上面的实例相反）
+	{
+	  "aggs": {
+	    "percentile_ranks_of_age": {
+	      "percentile_ranks": {
+	        "field": "age",
+	        "values": [20,25,30]
 	      }
 	    }
 	  }
@@ -1251,12 +1428,48 @@
 	    }
 	  }
 	}
+	GET /lib4/user/_search （在脚本中用_value获取聚合字段的值，并将其乘2，得到的聚合值将是原来的2倍）
+	{
+	  "aggs": {
+	    "sum_of_age": {
+	      "sum": {
+	        "field": "age",
+	        "script": {
+	          "source":"_value * params.factor",
+	          "params": {
+	            "factor":2
+	          }
+	        }
+	      }
+	    }
+	  }
+	}
 	GET lib4/user/_search （查询所有用户年龄的基数，只显示聚合结果而不显示查询的文档）
 	{
 	  "size": 0,
 	  "aggs": {
 	    "cardinality_of_age": {
 	      "cardinality": {
+	        "field": "age"
+	      }
+	    }
+	  }
+	}
+	GET /lib4/user/_search （统计age字段有值的文档数）
+	{
+	  "aggs": {
+	    "age_count": {
+	      "value_count": {
+	        "field": "age"
+	      }
+	    }
+	  }
+	}
+	GET /lib4/user/_search (统计age字段没有值的文档数)
+	{
+	  "aggs": {
+	    "age_count": {
+	      "missing": {
 	        "field": "age"
 	      }
 	    }
