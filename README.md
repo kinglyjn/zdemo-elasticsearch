@@ -238,10 +238,11 @@
 	g) 使用Head或kibana查看,发现只有nimbusz为主节点,其他两个节点并没有连接上来,查看日志发现报以下异常
 	   failed to send join request to master [{node-1}{SVrW6URqRsi3SShc1PBJkQ}{y2eFQNQ_TRenpAPyv-EnVg}xxx, 
 	   reason [RemoteTransportException[[node-1][xxxxxxxxxxxx:9300][internal:discovery/zen/join]]; nested:
-	   IllegalArgumentException[can't add node {node-3}...
+	   IllegalArgumentException[can't add node {node-3}..., found existing node..., with the same id but 
+	   is a different node instance]
 	   原因：可能是之前启动的时候报错,并没有启动成功,但是data文件中生成了其他节点的数据。将三个节点的data目录清空，再次重新
 	   启动，成功！
-	   
+	  
 	h) 实现远程连接ES服务：
 		解决方式：修改配置文件 config/elasticsearch.yml，配置 network.host: 192.168.1.106
 		如果再次启动出现 bind exception，则说明 network.host 配置错误！
@@ -498,6 +499,20 @@
 	    }
 	  }
 	}
+	
+	// 查看集群、节点、插件、索引、索引恢复情况、分片、线程池
+	GET _cluster/health?pretty 或 GET _cat/health?v
+	GET _cluster/state?pretty	
+	GET _cluster/stats?pretty
+	GET _cat/nodes?v
+	GET _cat/plugins?v
+	GET _cat/indices?v
+	GET _cat/recovery?v
+	GET _cat/shards?v
+	GET _cat/thread_pool?v
+	GET _cat/fielddata?v
+	GET _cat/count?v
+	GET _cat/allocation?v
 	
 	// 查看索引的配置
 	GET _all/_settings
@@ -960,7 +975,8 @@
 	}
 	
 	g) filter 查询
-	filter查询是不计算相关性的，同时filter查询及其结果可以一直保存在cache中，因此filter查询的速度要快于query。
+	大部分filter查询的速度快于query查询（因为filter不会计算相关度得分，且结果会有缓存）；
+	通常全文检索和评分排序使用query，是非过滤和精确匹配使用filter。
 	
 	GET /lib4/user/_search（term查询年龄为23的记录）
 	{
@@ -1066,9 +1082,9 @@
 	must_not: 相当于连接条件not
 	filter: 必须匹配，但它以不评分、过滤模式来执行。这些语句对评分没有贡献，只是根据过滤条件来排除或包含文档。
 	
-	相关性得分是如何组合的。每一个子查询都独立地计算文档的相关性得分，一旦他们的的二分被计算出来，bool查询就将这些得分进行合并并返回一个代表整个
-	布尔操作的得分。下面的查询将用于查找title字段匹配 how to make millons 并且不被标识为 spam 的文档，那些被标识为 starred 或在 2014 之
-	后的文档，将比另外那些文档拥有更高的排名。如果两者都满足，那么它的排名将会更高：
+	布尔查询是有评分的，那么相关性得分是如何组合得出的呢？实际上每一个子查询都独立地计算文档的相关性得分，一旦他们的的二分被计算出来，bool查询就
+	将这些得分进行合并并返回一个代表整个布尔操作的得分。下面的查询将用于查找title字段匹配 how to make millons 并且不被标识为 spam 的文档，
+	那些被标识为 starred 或在 2014 之后的文档，将比另外那些文档拥有更高的排名。如果两者都满足，那么它的排名将会更高：
 
 	GET lib6/xxx/_search
 	{
