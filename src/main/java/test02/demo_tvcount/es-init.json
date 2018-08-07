@@ -1,0 +1,53 @@
+PUT tv
+{
+	"settings": {
+		"number_of_shards": 5,
+		"number_of_replicas": 1
+	},
+	"mappings": {
+		"tvcount": {
+			"dynamic": "strict",
+			"_source": {
+				"enabled": false
+			},
+			"properties": {
+				"actor": {
+					"type": "text",
+					"analyzer": "ik_max_word",
+					"store": false
+				},
+				"alias": {
+					"type": "text",
+					"analyzer": "ik_max_word",
+					"store": false
+				},
+				"description": {
+					"type": "text",
+					"analyzer": "ik_max_word",
+					"store": false
+				},
+				"director": {
+					"type": "text",
+					"analyzer": "ik_max_word",
+					"store": false
+				},
+				"tvid": {
+					"type": "keyword",
+					"index": false,
+					"store": false,
+					"doc_values": false
+				},
+				"tvname": {
+					"type": "text",
+					"analyzer": "ik_max_word",
+					"store": false
+				},
+				"tvtype": {
+					"type": "text",
+					"analyzer": "ik_max_word",
+					"store": false
+				}
+			}
+		}
+	}
+}

@@ -108,6 +108,12 @@ public class TvTest {
 		if (tvCounts != null) {
 			tvCounts.forEach(v -> System.out.println(v));
 		}
+		System.out.println("--------------");
+		
+		List<TVCount> tvCounts2 = TvCountQuery.multiMatch(new String[]{"tv"}, new String[]{"tvtype"}, "历史", 0, 10);
+		if (tvCounts != null) {
+			tvCounts2.forEach(v -> System.out.println(v));
+		}
 	}
 	
 }
