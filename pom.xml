@@ -14,7 +14,18 @@
 		<log4j.version>2.11.0</log4j.version>
 	</properties>
 
-
+	<!-- 发布管理 -->
+	<distributionManagement>
+		<snapshotRepository>
+			<id>keyllo-nexus</id>
+			<url>http://keyllo.com:8081/repository/maven-snapshots/</url>
+		</snapshotRepository>
+		<repository>
+			<id>keyllo-nexus</id>
+			<url>http://keyllo.com:8081/repository/maven-releases/</url>
+		</repository>
+	</distributionManagement>
+	
 	<!-- 依赖管理 -->
 	<dependencies>
 		<!-- test -->
@@ -75,7 +86,6 @@
 			<artifactId>jsoup</artifactId>
 			<version>1.8.1</version>
 		</dependency>
-		
 	</dependencies>
 
 
@@ -83,6 +93,7 @@
 	<build>
 		<finalName>zdemo-elasticsearch</finalName>
 		<plugins>
+			<!-- 编译插件 -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
@@ -91,6 +102,29 @@
 					<source>${java.version}</source>
 					<target>${java.version}</target>
 					<encoding>${encoding}</encoding>
+				</configuration>
+			</plugin>
+			<!-- 源码插件 -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>3.0.1</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>jar-no-fork</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<!-- 中文站点信息生成插件 -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-site-plugin</artifactId>
+				<version>3.4</version>
+				<configuration>
+					<locales>zh_CN</locales>
 				</configuration>
 			</plugin>
 		</plugins>
