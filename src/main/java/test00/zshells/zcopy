@@ -1,0 +1,16 @@
+#!/bin/bash
+#
+# execute ssh shell
+# [notice] the first line of this shell set execution engine!
+#
+
+#params
+CONFIG=/home/kj/zshell/hosts.conf
+USER=kj
+
+while read host
+do
+  echo ----------$host-------------
+  scp -r $1 $USER@$host:$2
+done < $CONFIG
+

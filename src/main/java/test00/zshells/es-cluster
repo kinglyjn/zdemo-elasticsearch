@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# es-cluster shell
+# 注意 if和[ ]之间要有空格、[ ]和" "之间要空格、" "和=之间要空格 
+#
+#
+
+operation=$1
+if [ "$operation" = "start" ];then
+    zcall_by_expect "elasticsearch -d"
+elif [ "$operation" = "stop" ];then
+    zcall_by_expect "ps -ef | grep Elasticsearch | grep -v grep | awk '{print "'$2'"}' | xargs kill -9"
+fi
+

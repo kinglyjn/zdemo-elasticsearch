@@ -1,0 +1,22 @@
+#!/usr/bin/expect
+#
+# execute ssh shell
+# [notice] the first line of this shell set execution engine!
+#
+
+set cm [lindex $argv 0]
+
+set f [open /home/kj/zshell/hosts.conf]
+while {1} {
+    set line [gets $f]
+    if {[eof $f]} {
+        close $f
+        break
+    }
+
+    spawn ssh kj@$line
+      send "${cm} \r"
+      send "exit \r"
+    expect eof
+}
+

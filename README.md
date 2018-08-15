@@ -77,7 +77,7 @@
 	QueryDSL
 		类似于mysql的sql语句，只不过在es中使用的是json格式的查询语句。
 	RestfulAPI
-		GET[查]/POST[增改]/PUT[改]/DELETE[删]，类似于sql中的select/create/update/delete
+		GET[查]/POST[增、部分改]/PUT[增、覆盖改]/DELETE[删]，类似于sql中的select/create/update/delete
 		
 		[注1] REST(Representational State Transfer，即表述性状态传递)
 		这是一种软件架构的设计风格而不是标准，只是提供了一组设计原则和约束条件，它主要用于客户端和服务器交互类的软件设计。基于这个风格设计的
@@ -158,10 +158,14 @@
 	cluster.name: es6.2
 	//节点名称,其余两个节点分别为node-2 和node-3
 	node.name: node-1
-	//指定该节点是否有资格被选举成为master节点，默认是true，es是默认集群中的第一台机器为master，如果这台机挂了就会重新选举master
+	//[master node] node.master: true & node.data: false
+	//[data node] node.master: false & node.data: true
+	//[client node] node.master: false & node.data: false
+	//指定该点是否有资格被选举成为master节点，默认是true，es是默认集群中的第一台机器为master，如果这台机挂了就会重新选举master
 	node.master: true
 	//允许该节点存储数据(默认开启)
 	node.data: true
+	vm.max_map_count=262144
 	//索引数据的存储路径
 	path.data: /usr/local/elk/elasticsearch/data
 	//日志文件的存储路径
@@ -179,8 +183,27 @@
 	//（如果没有设置，port默认设置会transport.profiles.default.port 回落到transport.tcp.port）。
 	//请注意，IPv6主机必须放在括号内。默认为127.0.0.1, [::1]
 	discovery.zen.ping.unicast.hosts: ["nimbusz:9300", "supervisor01z:9300", "supervisor02z:9300"]
-	//如果没有这种设置,遭受网络故障的集群就有可能将集群分成两个独立的集群 - 分裂的大脑 - 这将导致数据丢失
-	discovery.zen.minimum_master_nodes: 1
+	//这个参数决定了要选举一个Master需要多少个候选节点，默认值是1，根据一般经验这个一般设置成 N/2 + 1，
+	//N是集群中节点的数量，例如一个有3个节点的集群，minimum_master_nodes 应该被设置成 3/2 + 1 = 2（向下取整）。
+	discovery.zen.minimum_master_nodes: 2
+	//主要是控制master选举过程中，发现其他node存活的超时设置(主要影响选举的耗时)
+	//这个参数设置的适当大一些可以减少master因为负载过重掉出集群的风险，但同时如果master真出问题了，重新选举过程会稍长，
+	//因为要做3轮ping，每一轮之间都会有一个增量delay，如果这个参数设置成了120秒，那么实际等待的时间加起来差不多要180秒，
+	//虽然每一次ping 都几乎是实时响应。建议是这个参数保持默认3秒就好。至于节点脱离问题，其实是由另一个参数 
+	//discovery.zen.fd.ping_timeout 控制的。
+	discovery.zen.ping_timeout: 3s
+	//判断结点是否脱离的设置
+	//这些参数在我们的环境长期运行后验证基本是比较理想的。 只有负载最重的日志集群，在夜间做force merge的时候，
+	//因为某些shard过大(300 - 400GB)， 大量的IO操作因为机器load过高，偶尔出现结点被误判脱离，然后马上又加回
+	//的现象。 虽然继续增大上面的几个参数可以减少误判的机会，但是如果真的有结点故障，将其剔除掉的周期又太长。 
+	//所以我们还是通过增加shard数量，限制shard的size来缓解forcemerge带来的压力，降低高负载结点被误判脱离的几率。 
+	discovery.zen.fd.ping_interval: 10s  
+	discovery.zen.fd.ping_timeout: 30s  
+	discovery.zen.fd.ping_retries: 3
+	
+	[注意] 防止脑裂：
+	关键的两个配置参数是：discovery.zen.minimum_master_nodes 和 discovery.zen.ping.timeout
+	
 	
 	调整es运行所需jvm的内存：
 	$ vim ${es_home}/config/jvm.options 
@@ -273,6 +296,8 @@
 	安装步骤：
 	a) 下载、解压
 	b) 编辑配置文件
+	
+	$
 
 ## mapping
 	
@@ -790,7 +815,7 @@
 	
 	
 	a) term查询和terms查询：
-	term query 会去倒排索引中寻找确切的term，它并”不知道分词器的存在“。这种查询适合keyword、numberic、date。
+	term query 会去【倒排索引】中寻找确切的term，它并”不知道分词器的存在“，即它在查询之前并不会对要查的句子分词。这种查询适合keyword、numberic、date。
 	term表示查询某个字段里含有某个关键词，而terms表示查询某个字段里含有多个关键词的意思。
 	
 	GET /lib3/user/_search (查询名字中包含zhangsan的文档)
