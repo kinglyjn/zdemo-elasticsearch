@@ -219,7 +219,12 @@
 	d) 将编译后生成的elasticsearch-analysis-ik-{version}.zip 移动到ik目录下，解压会生成elasticsearch文件夹（解压完成后zip包可删除）
 	e) 将解压生成的elasticsearch文件夹下的所有内容再拷贝到ik目录下（es默认去 plugins/ik 目录下加载分词器信息）
 	f) 验证是否安装成功，在es启动的时候，日志信息会显示 ...loaded plugin [analysis-ik]...
-	
+	g) 分词器分词的测试：
+	   GET _analyze
+	   {
+		 "analyzer": "ik_max_word",
+	      "text": "455 Colby Court" 
+	   }
 	
 	ES安装可能出现的问题：
 	a) can not run elasticsearch as root
@@ -355,12 +360,13 @@
 	dynamic：（true|false|strict）用于配置检测新发现字段的策略，默认为true。
 	store：（true|false）用于指定是否将原始字段写入索引。在Lucene中，高亮功能和store属性是否存储息息相关，因为需要根据偏移位置
 	       到原始文档中找到关键字才能加上高亮的片段。在Elasticsearch，因为_source中已经存储了一份原始文档，可以根据_source中的原始文档实现
-	       高亮，在索引中再存储原始文档就多余了，所以Elasticsearch默认是把store属性设置为no。注意:如果想要对某个字段实现高亮功能，_source
+	       高亮，在索引中再存储原始文档就多余了，所以Elasticsearch默认是把store属性设置为false。注意:如果想要对某个字段实现高亮功能，_source
 	       和store至少保留一个。
 	_source：{"enabled":false} 设置是否保存_source中包含的那些字段等信息。_source字段默认是存储的， 什么情况下不用保留_source字段？如果某
 	       个字段内容非常多，业务里面只需要能对该字段进行搜索，最后返回文档id，查看文档内容会再次到mysql或者hbase中取数据，把大字段的内容存在ES
 	       中只会增大索引，这一点文档数量越大结果越明显，如果一条文档节省几KB，放大到亿万级的量结果也是非常可观的。
-	       如果只想存储某几个字段的原始值到ES，可以设置_source:{"enabled":false}，并单独设置每个需要存储的字段的store属性为true。
+	       如果只想存储某几个字段的原始值到es，可以通过incudes参数来设置，"_source":{ "includes":["field1","field2"] }
+	       同样，可以通过excludes参数排除某些字段："_source":{ "excludes":["field1","field2"] }
 	index：（true|false）设置是否分词，从而生成倒排索引。设置成false，字段将不会被索引（当使用没被索引的字段进行查询时会抛出异常）。
 	       默认值为true，会将字符串、数字、日期、布尔等类型的值 或分词[针对text]或不分词[针对非text]处理之后 放到倒排索引中。
 	_all：{"enabled":false} 设置_all字段是否可用等信息。_all及相关的include_in_all在 ES6.0 之后已经废弃。
@@ -370,6 +376,17 @@
 	fields：{"raw":{"type":"keyword", "index":true}}，可以对一个字段提供多种索引模式，如一个字段的值一个分词，一个不分词。
 	fielddata：{"format":"disabled"}，针对分词字段，参与排序或聚合时提高性能，不分词字段统一建议使用doc_value。
 	doc_values：（true|false）只能用于不分词的字段，设置成false能对排序和聚合性能有较大提升，节约内存。默认都开启true。
+	       那么doc_values到底是什么呢？根据官网文档:
+	       [https://www.elastic.co/guide/en/elasticsearch/reference/master/doc-values.html#doc-values]
+	       绝大多数的fields在默认情况下是indexed，因此字段数据是可被搜索的。倒排索引中按照一定顺序存放着terms供搜索，
+	       当命中搜索时，返回包含term的document；当Sorting、aggregations、scripts access to field这三种情况的
+	       时候，我们需要另外的data access模式。这种模式和上述在terms中寻找term并且返回document是不同的。
+	       Doc values是一种on-disk数据结构，在document索引时被创建。它们以与_source列相同的方式存储相同的值，这对
+	       于排序和聚合来说更有效。除了analyzed string以外的所有类型都可以使用doc_values类型的索引。
+    		  doc_values的特性：
+       	  a) doc_values 默认情况下是true可用的；
+		  b) column-oriented 存放field，以便sort、aggregate、access the field from a script；
+		  c) doc_values为false时候，sort、aggregate、access the field from script将会无法使用，但可以节省磁盘空间。
 	analyzer：（"ik"）指定分词器，默认为 standard analyzer。
 	search_analyzer：设置索引时的分词器，默认跟analyzer是一致的。
 	ignore_above：256，超过256个字符的文本将会被忽略，不被索引。默认为256。
@@ -384,6 +401,35 @@
 	similarity："BM25"，指定一个字段评分策略，仅仅多字段类型或分词类型有效。默认是TF/IDF算法。
 	term_vector：（no|yes|with_positions|with_offsets），默认不存储向量信息。
 	dynamic_templates：使用模板定义 mapping。
+	
+	
+	[注] _source 和 store的区别：
+	众所周知_source字段存储的是索引的原始内容，那store属性的设置是为何呢？es为什么要把store的默认取值设置为no？设置为yes是否
+	是重复的存储呢？
+	我们将一个field的值写入es中，要么是想在这个field上执行search操作（不知道具体的id），要么执行retrieve操作（根据id来 检索）
+	但是，如果不显式的将该field的store属性设置为yes，同时_source字段enabled的情况下，你仍然可以获取到这个 field的值。这就意
+	味着在一些情况下让一个field不被index或者store仍然是有意义的。
+	当你将一个field的store属性设置为true，这个会在lucene层面处理。lucene是倒排索引，可以执行快速的全文检索，返回符合检索条件
+	的文档id列表。在全文索引之外，lucene也提供了存储字段的值的特性，以支持提供id的查询（根据id得到原始信息）。通常我们在lucene
+	层面存储的field的值是跟随search请求一起返回的（id+field的值）。es并不需要存储你想返回的每一个field的值，因为默认情况下每
+	一个文档的的完整信息都已经存储了，因此可以跟随查询结构返回你想要的所有field值。
+	有一些情况下，显式的存储某些field的值是必须的：当_source被disabled的时候，或者你并不想从source中parser来得到 field的值
+	即使这个过程是自动的。	记住：从每一个stored field中获取值都需要一次磁盘io，如果想获取多个field的值，就需要多次磁盘io，但是，
+	如果从_source中获取多个field的值，则只 需要一次磁盘io，因为_source只是一个字段而已。所以在大多数情况下，从_source中获取是
+	快速而高效的。
+	es中默认的设置_source是enable的，存储整个文档的值。这意味着在执行search操作的时候可以返回整个文档的信息。如果不想返回这个
+	文档的完整信息，也可以指定要求返回的field，es会自动从_source中抽取出指定field的值返回（比如说highlighting的需求）。
+	你可以指定一些字段store为true，这意味着这个field的数据将会被单独存储。这时候，如果你要求返回field1（store：yes），es会分
+	辨出field1已经被存储了，因此不会从_source中加载，而是从field1的存储块中加载。
+	哪些情形下需要显式的指定store属性呢？大多数情况并不是必须的。从_source中获取值是快速而且高效的。如果你的文档长度很长，存储 
+	_source或者从_source中获取field的代价很大，你可以显式的将某些field的store属性设置为yes。缺点如上边所说：假设你存 储了10
+	个field，而如果想获取这10个field的值，则需要多次的io，如果从_source中获取则只需要一次，而且_source是被压缩过 的。
+	还有一种情形：reindex from some field，对某些字段重建索引的时候。从source中读取数据然后reindex，和从某些field中读取数据
+	相比，显然后者代价更低一些。这些字段store设置为yes比较合适。
+	总结：
+	如果对某个field做了索引，则可以查询。如果store：yes，则可以展示该field的值。
+	但是如果你存储了这个doc的数据（_source enable），即使store为no，仍然可以得到field的值（client去解析）。
+	所以一个store设置为no 的field，如果_source被disable，则只能检索不能展示。
 	
 	
 	底层存储格式示例：
@@ -660,6 +706,7 @@
 	delete：删除一个文档
 	
 	示例：
+	1.
 	POST /lib2/books/_bulk（如果中间存在失败的操作，则返回结果中包含 error:true（其他操作是成功的））
 	{"index":{}}
 	{"title":"CSS", "price":12}
@@ -676,6 +723,10 @@
 	{"delete":{"_index":"lib2", "_type":"books", "_id":5}}
 	{"update":{"_index":"lib2", "_type":"books", "_id":4}}
 	{"doc":{"price":48}}
+	
+	2.
+	从文件中小批量导入数据示例：
+	curl -X PUT -H "Content-Type:application/json"  "bd102:9200/lib1/account/_bulk?pretty" --data-binary @accounts.json
 	
 	bulk批量操作的json格式被设计成如上所述的格式：
 	{action:{metadata}}\n
@@ -841,7 +892,7 @@
 	match_all 表示查询所有符合条件的文档。
 	multi_match 与 match 相似，不过他可以指定多个字段。
 	match_phrase 表示短语匹配查询，当查询的短语与原文档中包含的短语一致时才能匹配到。
-	match_phrase_prefix 表示前缀匹配，当查询的前缀与原文档中一致即可匹配到。
+	match_phrase_prefix 表示前缀匹配，当查询的前缀与原文档中一致即可匹配到。对于keyword类型前缀匹配只能匹配到整个keyword词，对于text可前缀匹配词的一部分。
 	
 	GET /lib3/user/_search （首先对zhangsan lisi进行分词，然后查找，得到zhangsan和lisi的记录）
 	{
@@ -880,7 +931,7 @@
 	  },
 	  "sort":[
 		{ "age":{"order":"desc"} }
-		{ "birthday":{"order":"desc"s} }
+		{ "birthday":{"order":"desc"} }
 	  ]
 	}
 	GET /lib3/user/_search （查询地址的前缀是 beij 的文档，默认不区分大小写）
@@ -1107,7 +1158,7 @@
 	must_not: 相当于连接条件not
 	filter: 必须匹配，但它以不评分、过滤模式来执行。这些语句对评分没有贡献，只是根据过滤条件来排除或包含文档。
 	
-	布尔查询是有评分的，那么相关性得分是如何组合得出的呢？实际上每一个子查询都独立地计算文档的相关性得分，一旦他们的的二分被计算出来，bool查询就
+	布尔查询是有评分的，那么相关性得分是如何组合得出的呢？实际上每一个子查询都独立地计算文档的相关性得分，一旦他们的的得分被计算出来，bool查询就
 	将这些得分进行合并并返回一个代表整个布尔操作的得分。下面的查询将用于查找title字段匹配 how to make millons 并且不被标识为 spam 的文档，
 	那些被标识为 starred 或在 2014 之后的文档，将比另外那些文档拥有更高的排名。如果两者都满足，那么它的排名将会更高：
 
@@ -1149,7 +1200,7 @@
 
 	如果没有must语句，那么至少需要能够匹配其中的一条should语句。但是，如果存在至少一条must语句，则对should语句的匹配没有要求。如果我们不想
 	因为文档的时间而影响得分，可以使用filter语句来重写前面的例子，通过将range查询移到filter语句中，我们将它转成不评分的查询，将不再影响文档
-	的相关性排名。由于它仙现在是一个不评分的查询，可以使用各种对filter查询有效的优化手段来提高性能：
+	的相关性排名。由于它现现在是一个不评分的查询，可以使用各种对filter查询有效的优化手段来提高性能：
 
 	GET lib6/xxx/_search
 	{
@@ -1320,7 +1371,7 @@
 		
 	i) 聚合查询
 	两种聚合操作：分桶聚合（分组） 和 指标聚合（求最大值、最小值等）
-	常用的聚合函数：stats、extended_stats、percentiles、percentile_ranks、sum、avg、min、max、cardinality、value_count、missing 等。
+	常用的指标聚合函数：stats、extended_stats、percentiles、percentile_ranks、sum、avg、min、max、cardinality、value_count、missing 等。
 	
 	GET lib4/user/_search （根据年龄进行分组，显示前3条聚合结果，不显示查询的文档，聚合查询的结果按每一项的key顺序输出）
 	{
@@ -1399,32 +1450,109 @@
 	  }
 	}
 	GET /lib20/car/_search（根据多个过滤条件进行分组，每一个过滤条件对应于它各自的分组。这里不在过滤条件中的文档被分到other_country_cars组 ）
+	GET /lib2/car/_search
 	{
+	  "size": 0, 
 	  "aggs": {
-	    "changan_cars": {
+	    "filters_of_cars":{
 	      "filters": {
-	        "other_bucket_key": "other_country_cars", 
+	        "other_bucket_key": "filter_of_others", 
 	        "filters": {
-	          "china_cars": {
+	          "filter_of_china": {
 	            "match":{
 	              "country":"china"
 	            }
 	          },
-	          "germany_cars":{
-	            "match_phrase_prefix":{
-	              "country":"germany"
+	          "filter_of_germany":{
+	            "term": {
+	              "country": "germany"
 	            }
 	          },
-	          "america_cars":{
+	          "filter_of_america":{
 	            "prefix": {
-	              "country": "americ"
+	              "country": "america"
 	            }
+	          }
+	        }
+	      },
+	      "aggs": {
+	        "group_of_brand": {
+	          "terms": {
+	            "field": "brand"
 	          }
 	        }
 	      }
 	    }
 	  }
 	}
+	
+	//聚合的计算结果
+	{
+	  ...
+	  ,
+	  "aggregations": {
+	    "filters_of_cars": {
+	      "buckets": {
+	        "filter_of_america": {
+	          "doc_count": 1,
+	          "group_of_brand": {
+	            "doc_count_error_upper_bound": 0,
+	            "sum_other_doc_count": 0,
+	            "buckets": [
+	              {
+	                "key": "fute",
+	                "doc_count": 1
+	              }
+	            ]
+	          }
+	        },
+	        "filter_of_china": {
+	          "doc_count": 3,
+	          "group_of_brand": {
+	            "doc_count_error_upper_bound": 0,
+	            "sum_other_doc_count": 0,
+	            "buckets": [
+	              {
+	                "key": "qiruiqq",
+	                "doc_count": 2
+	              },
+	              {
+	                "key": "changan",
+	                "doc_count": 1
+	              }
+	            ]
+	          }
+	        },
+	        "filter_of_germany": {
+	          "doc_count": 2,
+	          "group_of_brand": {
+	            "doc_count_error_upper_bound": 0,
+	            "sum_other_doc_count": 0,
+	            "buckets": [
+	              {
+	                "key": "benchi",
+	                "doc_count": 1
+	              },
+	              {
+	                "key": "dazhong",
+	                "doc_count": 1
+	              }
+	            ]
+	          }
+	        },
+	        "filter_of_others": {
+	          "doc_count": 0,
+	          "group_of_brand": {
+	            "doc_count_error_upper_bound": 0,
+	            "sum_other_doc_count": 0,
+	            "buckets": []
+	          }
+	        }
+	      }
+	    }
+	  }
+	}
+	
 	GET /lib3/user/_search （根据年龄范围进行分组，并指定每个分组的key。除了数字类型可以进行范围聚合，日期类型也可以）
 	{
 	  "size": 0, 
@@ -1599,7 +1727,8 @@
 	
 	j) contant_score查询
 	它将一个不变的常量评分应用于所有匹配的文档。它被经常用于你只需要执行一个filter为没有其他查询（例如评分查询）的情况下。
-
+	terms查询被放在constant_score中，可以转化为不评分的filter，这种方式可以用来取代只有filter语句的bool查询。
+	
 	GET lib4/user/_search
 	{
 	  "query": {
@@ -1618,7 +1747,8 @@
 	ES聚合指定字段时聚合的结果里面只显示聚合的字段。但是在做报表时，我们发现一个问题：如果我们对员工进行聚合，但是我们还希望查看当前员工所在的
 	班组，部门等信息。这时如果查询es两次，对于效率来说是不好的。所以我们在这里使用一个es的字段特性：copy_to。
 	注意：
-	i) 我们copy_to指向的字段字段类型要为text
+	i) 我们copy_to指向的字段字段类型要为text，例如copy_to指向后的字段定义如下：
+	   .."full_name": {"type":"text", "fields":{"keyword":{"type": "keyword","ignore_above": 256} } } ..
 	ii) text类型字段如果希望进行聚合，设置属性 "fielddata": true（特别注意，设置为fielddata为true的字段将会把数据存放在内存中！）
 	iii) copy_to指向的字段不会在head插件查看时显示，但是能通过查询语句作为条件
 	
