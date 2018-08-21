@@ -1,16 +1,25 @@
 #!/bin/bash
-#
-# execute ssh shell
-# [notice] the first line of this shell set execution engine!
-#
 
-#params
-CONFIG=/home/kj/zshell/hosts.conf
-USER=kj
 
-while read host
+# set env params
+hosts=/opt/zshells/hosts.conf
+current_host=`hostname`
+user=`whoami`
+
+# switch of param count
+param_count=$#
+if (( param_count!=2 )) ; then 
+  echo illegal params!
+  exit
+fi
+
+# loop execution
+while read line
 do
-  echo ----------$host-------------
-  scp -r $1 $USER@$host:$2
-done < $CONFIG
+  if [[ $line == $current_host ]] ; then 
+    continue
+  fi
+  echo ------------$line------------- 
+  scp -r $1 $user@$line:$2
+done < $hosts
 

@@ -29,10 +29,12 @@ public class Test01_TransportClient_ClusterInfo {
 	
 	@Before
 	public void getTransportClient() {
-		Settings settings = Settings.builder().put("cluster.name", "elasticsearch").build();
+		Settings settings = Settings.builder().put("cluster.name", "local-es").build();
 		client = new PreBuiltTransportClient(settings , new ArrayList<Class<? extends Plugin>>(1));
 		try {
-			client.addTransportAddress(new TransportAddress(InetAddress.getByName("nimbusz"), 9300));
+			client.addTransportAddress(new TransportAddress(InetAddress.getByName("host01"), 9300));
+			client.addTransportAddress(new TransportAddress(InetAddress.getByName("host02"), 9300));
+			client.addTransportAddress(new TransportAddress(InetAddress.getByName("host03"), 9300));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
